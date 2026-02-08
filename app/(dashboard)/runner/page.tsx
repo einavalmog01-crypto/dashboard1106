@@ -191,33 +191,6 @@ export default function TestRunnerPage() {
   const passed = tests.filter(t => t.status === "passed").length
   const failed = tests.filter(t => t.status === "failed").length
 
-  function scheduleSanity() {
-    if (!scheduleDate || !scheduleTime) {
-      alert("Please select both date and time.")
-      return
-    }
-
-    const newEntry = {
-      id: crypto.randomUUID(),
-      type: scheduleType,
-      environment: selectedEnv,
-      date: scheduleDate,
-      time: scheduleTime,
-      recurrence,
-      createdAt: new Date().toISOString(),
-      isActive: true,
-    }
-
-    const existing = JSON.parse(localStorage.getItem("scheduledSanities") || "[]")
-    const updated = [newEntry, ...existing]
-    localStorage.setItem("scheduledSanities", JSON.stringify(updated))
-
-    alert(`Sanity scheduled for ${scheduleDate} at ${scheduleTime} (${recurrence}) on ${selectedEnv}`)
-    setIsScheduleModalOpen(false)
-    setScheduleDate("")
-    setScheduleTime("")
-  }
-
 async function runBasicSanity() {
   if (!currentEnvironmentConfig?.isConfigured) {
     alert(`Environment ${selectedEnv} is not configured. Please go to Settings and configure the credentials.`)
@@ -868,7 +841,7 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
               <Button 
                 onClick={runBasicSanity}
                 disabled={isRunning || !currentEnvironmentConfig?.isConfigured}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 text-white hover:bg-blue-700"
               >
                 {isRunning ? "Running..." : `Run Basic Sanity (${selectedEnv})`}
               </Button>
