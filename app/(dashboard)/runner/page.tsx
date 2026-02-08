@@ -840,7 +840,7 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
             <CardContent className="flex flex-col gap-2">
               <Button 
                 onClick={runBasicSanity}
-                disabled={isRunning || !currentEnvironmentConfig?.isConfigured}
+                disabled={isRunning}
                 className="bg-blue-600 text-white hover:bg-blue-700"
               >
                 {isRunning ? "Running..." : `Run Basic Sanity (${selectedEnv})`}
