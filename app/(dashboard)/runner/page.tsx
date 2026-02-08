@@ -191,6 +191,33 @@ export default function TestRunnerPage() {
   const passed = tests.filter(t => t.status === "passed").length
   const failed = tests.filter(t => t.status === "failed").length
 
+  function scheduleSanity() {
+    if (!scheduleDate || !scheduleTime) {
+      alert("Please select both date and time.")
+      return
+    }
+
+    const newEntry = {
+      id: crypto.randomUUID(),
+      type: scheduleType,
+      environment: selectedEnv,
+      date: scheduleDate,
+      time: scheduleTime,
+      recurrence,
+      createdAt: new Date().toISOString(),
+      isActive: true,
+    }
+
+    const existing = JSON.parse(localStorage.getItem("scheduledSanities") || "[]")
+    const updated = [newEntry, ...existing]
+    localStorage.setItem("scheduledSanities", JSON.stringify(updated))
+
+    alert(`Sanity scheduled for ${scheduleDate} at ${scheduleTime} (${recurrence}) on ${selectedEnv}`)
+    setIsScheduleModalOpen(false)
+    setScheduleDate("")
+    setScheduleTime("")
+  }
+
 async function runBasicSanity() {
   if (!currentEnvironmentConfig?.isConfigured) {
     alert(`Environment ${selectedEnv} is not configured. Please go to Settings and configure the credentials.`)
