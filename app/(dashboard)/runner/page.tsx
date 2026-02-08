@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useEnvironment } from "@/lib/environment-context"
-import { CheckCircle, XCircle, Clock, Loader2, Settings2 } from "lucide-react"
+import { CheckCircle, XCircle, Clock, Loader2, Settings2, CalendarClock, X } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
 
 
 interface TestCase {
@@ -177,10 +178,14 @@ export default function TestRunnerPage() {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
   const [configureTestId, setConfigureTestId] = useState<string | null>(null)
   const [editingTemplates, setEditingTemplates] = useState<{ [stepName: string]: string }>({})
-  const [scheduleType, setScheduleType] = useState<"full" | "basic">("full")
+  const [scheduleType, setScheduleType] = useState<"basic">("basic")
   const [scheduleDate, setScheduleDate] = useState("")
   const [scheduleTime, setScheduleTime] = useState("")
   const [recurrence, setRecurrence] = useState<"daily" | "weekly" | "monthly">("daily")
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false)
+  const [currentRunningTest, setCurrentRunningTest] = useState<string | null>(null)
+  const [runProgress, setRunProgress] = useState({ current: 0, total: 0 })
+  const [completedTestIds, setCompletedTestIds] = useState<string[]>([])
 
   const selectedTests = tests.filter(t => t.selected)
   const passed = tests.filter(t => t.status === "passed").length
@@ -194,12 +199,17 @@ async function runBasicSanity() {
 
   setIsRunning(true)
   setTestResults([])
+  setCompletedTestIds([])
   const results: { name: string; status: "PASS" | "FAILED"; error: string; comment?: string }[] = []
 
   // Get tests that are in the Basic Sanity list
   const basicSanityTests = tests.filter(t => BASIC_SANITY_TESTS.includes(t.id))
+  setRunProgress({ current: 0, total: basicSanityTests.length })
 
-  for (const test of basicSanityTests) {
+  for (let i = 0; i < basicSanityTests.length; i++) {
+    const test = basicSanityTests[i]
+    setCurrentRunningTest(test.name)
+    setRunProgress({ current: i, total: basicSanityTests.length })
     setTests(t => t.map(x => x.id === test.id ? { ...x, status: "running" } : x))
 
     try {
@@ -224,6 +234,7 @@ async function runBasicSanity() {
       const passed = data.success
 
       setTests(t => t.map(x => x.id === test.id ? { ...x, status: passed ? "passed" : "failed" } : x))
+      setCompletedTestIds(prev => [...prev, test.id])
 
       setTestResults(prev => [...prev, {
         testId: test.id,
@@ -243,6 +254,7 @@ async function runBasicSanity() {
       })
     } catch (error) {
       setTests(t => t.map(x => x.id === test.id ? { ...x, status: "failed" } : x))
+      setCompletedTestIds(prev => [...prev, test.id])
 
       setTestResults(prev => [...prev, {
         testId: test.id,
@@ -266,6 +278,8 @@ async function runBasicSanity() {
   // Save as BASIC sanity report
   saveSanityReport("BASIC", selectedEnv, results)
   setIsRunning(false)
+  setCurrentRunningTest(null)
+  setRunProgress({ current: basicSanityTests.length, total: basicSanityTests.length })
 }
 
 async function runSelected() {
@@ -843,6 +857,13 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
               >
                 Schedule Sanity
               </Button>
+              <Button 
+                onClick={() => setIsTimelineOpen(true)} 
+                className="bg-pink-500 text-white hover:bg-pink-600"
+              >
+                <CalendarClock className="mr-2 h-4 w-4" />
+                Auto Sanity Timeline
+              </Button>
               <Button
                 className="bg-purple-600 text-white hover:bg-purple-700"
                 onClick={() => window.open("/sanity-reports", "_blank")}
@@ -853,6 +874,62 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
           </Card>
         </div>
       </div>
+
+      {/* Live Progress Tracker */}
+      {isRunning && currentRunningTest && (
+        <Card className="mt-6 border-blue-500/50 bg-blue-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-blue-300">
+                    Running Basic Sanity on {selectedEnv}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {runProgress.current} / {runProgress.total} tests
+                  </span>
+                </div>
+                <Progress 
+                  value={runProgress.total > 0 ? (runProgress.current / runProgress.total) * 100 : 0} 
+                  className="h-2"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-8">
+              <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+              <span className="text-sm font-medium">
+                Currently running: <span className="text-blue-400">{currentRunningTest}</span>
+              </span>
+            </div>
+            {completedTestIds.length > 0 && (
+              <div className="mt-3 px-8 space-y-1">
+                <span className="text-xs text-muted-foreground">Completed:</span>
+                <div className="flex flex-wrap gap-2">
+                  {completedTestIds.map(id => {
+                    const test = tests.find(t => t.id === id)
+                    const status = test?.status
+                    return (
+                      <Badge 
+                        key={id} 
+                        variant={status === "passed" ? "default" : "destructive"}
+                        className="text-xs"
+                      >
+                        {status === "passed" ? (
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                        ) : (
+                          <XCircle className="h-3 w-3 mr-1" />
+                        )}
+                        {test?.name}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Test Results Panel */}
       {testResults.length > 0 && (
@@ -1000,6 +1077,27 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
         </div>
       )}
 
+      {/* Auto Sanity Timeline Modal */}
+      {isTimelineOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border rounded-lg p-6 w-[90vw] max-w-2xl max-h-[80vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-5 w-5 text-pink-500" />
+                <h4 className="text-lg font-semibold">Auto Sanity Timeline</h4>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsTimelineOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              All scheduled sanities across environments.
+            </p>
+            <ScheduledSanitiesList />
+          </div>
+        </div>
+      )}
+
       {/* Schedule Modal */}
       {isScheduleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1014,10 +1112,9 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
                 Sanity Type:
                 <select
                   value={scheduleType}
-                  onChange={e => setScheduleType(e.target.value as "full" | "basic")}
+                  onChange={e => setScheduleType(e.target.value as "basic")}
                   className="border px-2 py-1 rounded"
                 >
-                  <option value="full">Full Sanity</option>
                   <option value="basic">Basic Sanity</option>
                 </select>
               </label>
@@ -1091,4 +1188,98 @@ function StatusIcon({ status }: { status: TestCase["status"] }) {
   if (status === "passed") return <CheckCircle className="h-4 w-4 text-green-500" />
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />
   return <Clock className="h-4 w-4 text-muted-foreground" />
+}
+
+interface ScheduledSanity {
+  id: string
+  type: string
+  environment: string
+  date: string
+  time: string
+  recurrence: string
+  createdAt: string
+  isActive: boolean
+}
+
+function ScheduledSanitiesList() {
+  const [items, setItems] = useState<ScheduledSanity[]>([])
+
+  useEffect(() => {
+    const raw = localStorage.getItem("scheduledSanities")
+    if (raw) {
+      setItems(JSON.parse(raw))
+    }
+  }, [])
+
+  function removeSchedule(id: string) {
+    const updated = items.filter(item => item.id !== id)
+    setItems(updated)
+    localStorage.setItem("scheduledSanities", JSON.stringify(updated))
+  }
+
+  function toggleActive(id: string) {
+    const updated = items.map(item => 
+      item.id === id ? { ...item, isActive: !item.isActive } : item
+    )
+    setItems(updated)
+    localStorage.setItem("scheduledSanities", JSON.stringify(updated))
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <CalendarClock className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <p className="text-sm">No scheduled sanities yet.</p>
+        <p className="text-xs mt-1">Use the Schedule Sanity button to create one.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => (
+        <div 
+          key={item.id} 
+          className={`flex items-center justify-between border rounded-lg p-4 ${
+            item.isActive ? "border-pink-500/30 bg-pink-500/5" : "opacity-50"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className={`mt-1 h-2.5 w-2.5 rounded-full ${item.isActive ? "bg-pink-500" : "bg-muted-foreground"}`} />
+            <div>
+              <div className="text-sm font-medium">
+                {item.type.toUpperCase()} Sanity
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {item.environment} &mdash; {item.date} at {item.time}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Recurrence: <span className="capitalize">{item.recurrence}</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Created: {new Date(item.createdAt).toLocaleString()}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge 
+              variant={item.isActive ? "default" : "secondary"} 
+              className={`cursor-pointer text-xs ${item.isActive ? "bg-pink-500 hover:bg-pink-600" : ""}`}
+              onClick={() => toggleActive(item.id)}
+            >
+              {item.isActive ? "Active" : "Paused"}
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() => removeSchedule(item.id)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
