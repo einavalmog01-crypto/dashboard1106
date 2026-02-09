@@ -107,6 +107,9 @@ export default function DocumentationPage() {
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null)
   const [deletingDoc, setDeletingDoc] = useState<Document | null>(null)
 
+  // Drag-and-drop state
+  const [isDragging, setIsDragging] = useState(false)
+
   // Get current branch and documents
   const selectedBranch = branches.find(b => b.id === selectedBranchId)
   const currentDocs = selectedBranchId && selectedCategory && selectedSystem
@@ -183,15 +186,65 @@ export default function DocumentationPage() {
     setDocDialogOpen(true)
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const processFile = (file: File) => {
     setDocFileName(file.name)
+    if (!docTitle.trim()) {
+      setDocTitle(file.name.replace(/\.[^/.]+$/, ""))
+    }
     const reader = new FileReader()
     reader.onload = () => {
       setDocFileData(reader.result as string)
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+
+    if (docDialogOpen) {
+      processFile(files[0])
+    } else {
+      if (!selectedBranchId || !selectedCategory || !selectedSystem) {
+        return
+      }
+      const file = files[0]
+      setEditingDoc(null)
+      setDocTitle(file.name.replace(/\.[^/.]+$/, ""))
+      setDocDescription("")
+      setDocUrl("")
+      setDocFileName("")
+      setDocFileData("")
+      setDocDialogOpen(true)
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        setDocFileName(file.name)
+        setDocFileData(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
   }
 
   const saveDoc = () => {
@@ -245,7 +298,25 @@ export default function DocumentationPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
+    <div 
+      className={`flex h-[calc(100vh-8rem)] relative ${isDragging ? "ring-2 ring-primary ring-dashed rounded-lg" : ""}`}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Drag Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-none">
+          <div className="text-center">
+            <Upload className="h-12 w-12 mx-auto text-primary mb-3" />
+            <p className="text-lg font-medium">Drop files here</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Documents, presentations, spreadsheets, videos and more
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className="w-80 border-r flex flex-col">
         <div className="p-4 border-b flex items-center justify-between">
@@ -607,14 +678,51 @@ export default function DocumentationPage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Or Upload File</label>
-              <Input
-                type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                onChange={handleFileUpload}
-              />
-              {docFileName && (
-                <p className="text-xs text-muted-foreground mt-1">Selected: {docFileName}</p>
-              )}
+              <div 
+                className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                  docFileName ? "border-primary/50 bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                }`}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const file = e.dataTransfer.files[0]
+                  if (file) processFile(file)
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+              >
+                {docFileName ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-sm">{docFileName}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => { setDocFileName(""); setDocFileData("") }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Drag & drop a file here, or <span className="text-primary underline">browse</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PDF, Word, Excel, PowerPoint, videos, and more
+                    </p>
+                    <Input
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
