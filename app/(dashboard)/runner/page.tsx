@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -167,6 +168,7 @@ function saveSanityReport(
 }
 
 export default function TestRunnerPage() {
+  const router = useRouter()
   const { selectedEnv, currentEnvironmentConfig } = useEnvironment()
   const [tests, setTests] = useState(initialTests)
   const [isRunning, setIsRunning] = useState(false)
@@ -866,7 +868,7 @@ SELECT TRIM(BAR_CODE) FROM OGW_BARCODE_MAPPING WHERE OGW_ORDER_ID = '{{OGW_ORDER
               </Button>
               <Button
                 className="bg-purple-600 text-white hover:bg-purple-700"
-                onClick={() => window.open("/sanity-reports", "_blank")}
+                onClick={() => router.push("/sanity-reports")}
               >
                 Sanity Reports
               </Button>
