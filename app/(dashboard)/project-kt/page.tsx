@@ -49,6 +49,7 @@ import {
   BookOpen,
   FolderOpen,
   Search,
+  Upload,
 } from "lucide-react"
 
 const STORAGE_KEY = "projectKTResources"
@@ -99,6 +100,7 @@ export default function ProjectKTPage() {
 // Filter state
   const [filterType, setFilterType] = useState<ResourceType | "all">("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [isDragging, setIsDragging] = useState(false)
 
   useEffect(() => {
     setResources(loadResources())
@@ -138,17 +140,73 @@ const filteredResources = resources.filter(r => {
     setIsDialogOpen(true)
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const processFile = (file: File) => {
     setFileName(file.name)
-    
+    if (!title.trim()) {
+      setTitle(file.name.replace(/\.[^/.]+$/, ""))
+    }
     const reader = new FileReader()
     reader.onload = () => {
       setFileData(reader.result as string)
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  const getFileResourceType = (file: File): ResourceType => {
+    if (file.type.startsWith("video/")) return "video"
+    return "document"
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+
+    if (isDialogOpen) {
+      // If dialog is open, add to current form
+      processFile(files[0])
+    } else {
+      // If dialog is closed, auto-open dialog for each file
+      const file = files[0]
+      const type = getFileResourceType(file)
+      setEditingResource(null)
+      setResourceType(type)
+      setTitle(file.name.replace(/\.[^/.]+$/, ""))
+      setDescription("")
+      setUrl("")
+      setFileName("")
+      setFileData("")
+      setIsDialogOpen(true)
+
+      // Process file after dialog state is set
+      const reader = new FileReader()
+      reader.onload = () => {
+        setFileName(file.name)
+        setFileData(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    // Only set false if we're leaving the container (not entering a child)
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
   }
 
   const saveResource = () => {
@@ -225,7 +283,25 @@ const filteredResources = resources.filter(r => {
   }
 
   return (
-    <div className="space-y-6">
+    <div 
+      className={`space-y-6 relative min-h-[50vh] ${isDragging ? "ring-2 ring-primary ring-dashed rounded-lg" : ""}`}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Drag Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary pointer-events-none">
+          <div className="text-center">
+            <Upload className="h-12 w-12 mx-auto text-primary mb-3" />
+            <p className="text-lg font-medium">Drop files here</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Documents, videos, presentations, spreadsheets and more
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -482,16 +558,51 @@ const filteredResources = resources.filter(r => {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Or Upload File</label>
-                  <Input
-                    type="file"
-                    accept={resourceType === "video" ? "video/*" : ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"}
-                    onChange={handleFileUpload}
-                  />
-                  {fileName && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Selected: {fileName}
-                    </p>
-                  )}
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                      fileName ? "border-primary/50 bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                    }`}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const file = e.dataTransfer.files[0]
+                      if (file) processFile(file)
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                  >
+                    {fileName ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        <span className="text-sm">{fileName}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 px-2 text-xs"
+                          onClick={() => { setFileName(""); setFileData("") }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block">
+                        <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          Drag & drop a file here, or <span className="text-primary underline">browse</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          PDF, Word, Excel, PowerPoint, videos, and more
+                        </p>
+                        <Input
+                          type="file"
+                          className="hidden"
+                          onChange={handleFileUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               </>
             )}
